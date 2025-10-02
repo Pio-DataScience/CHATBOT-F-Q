@@ -16,7 +16,7 @@ def build_question_messages(heading: str, answer_html: str, qmin=3,
         "- Keep intent identical to the heading/section.\n"
         "- No duplication; vary phrasing.\n"
         "- No punctuation except a trailing question mark if natural.\n"
-        "- English only for now.\n"
+        "- Match the language of the heading/content (Arabic, English, etc.).\n"
         "Output JSON only."
     )
     return [{"role": "system", "content": sys},

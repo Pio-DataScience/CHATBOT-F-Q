@@ -6,7 +6,16 @@ from bs4 import BeautifulSoup
 # local import to avoid circulars
 from src.llm.prompts import build_question_messages
 
+AR_RE = re.compile(r'[\u0600-\u06FF]')
 logger = logging.getLogger(__name__)
+
+
+def _ensure_qmark(s: str) -> str:
+    # Preserve if ends with either Western or Arabic question mark
+    if s.endswith("?") or s.endswith("؟"):
+        return s
+    # Use Arabic question mark if any Arabic letters exist; else '?'
+    return s + ("؟" if AR_RE.search(s) else "?")
 
 
 def extract_answer_html(fragment_html: str) -> str:
@@ -54,7 +63,7 @@ def parse_alternatives(raw: str, qmin=3, qmax=8, max_words=12):
         logger.debug("Found %d raw alternatives", len(alts))
 
         # enforce limits
-        alts = [a if a.endswith("?") else a + "?" for a in alts]
+        alts = [_ensure_qmark(a) for a in alts]
         logger.debug("Added question marks where needed")
 
         alts = [a for a in alts if len(a.split()) <= max_words]

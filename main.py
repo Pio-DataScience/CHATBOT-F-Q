@@ -48,8 +48,8 @@ def build_parser():
 
     p.add_argument("--db-insert", action="store_true")
     p.add_argument("--db-dsn", default="192.168.30.43:1521/OPENBI2")
-    p.add_argument("--db-user", default="BI_DWH")
-    p.add_argument("--db-pass", default="BI_DWH")
+    p.add_argument("--db-user", default="UNI_REPOS")
+    p.add_argument("--db-pass", default="UNI_REPOS")
     p.add_argument("--country", type=int, default=0)
     p.add_argument("--inst", type=int, default=0)
     p.add_argument("--lang", type=int, default=1)          # 1 = English now
