@@ -31,8 +31,9 @@ def extract_answer_html(fragment_html: str) -> str:
 def _strip_code_fences(s: str) -> str:
     """Remove markdown code fence markers from string."""
     logger.debug("Stripping code fences from response")
-    return re.sub(r"^\s*```(?:json)?|```\s*$", "",
-                  s.strip(), flags=re.I | re.M)
+    return re.sub(
+        r"^\s*```(?:json)?|```\s*$", "", s.strip(), flags=re.I | re.M
+    )
 
 
 def _normalize_list(xs):
@@ -50,13 +51,14 @@ def _normalize_list(xs):
 
 def parse_alternatives(raw: str, qmin=3, qmax=8, max_words=12):
     """Parse LLM response to extract alternative questions."""
-    logger.debug("Parsing alternatives from LLM response (%d chars)",
-                 len(raw))
+    logger.debug("Parsing alternatives from LLM response (%d chars)", len(raw))
 
     try:
         cleaned = _strip_code_fences(raw)
-        logger.debug("Cleaned response: %s", cleaned[:100] + "..."
-                     if len(cleaned) > 100 else cleaned)
+        logger.debug(
+            "Cleaned response: %s",
+            cleaned[:100] + "..." if len(cleaned) > 100 else cleaned
+        )
 
         data = json.loads(cleaned)
         alts = data.get("alternatives", [])
@@ -67,16 +69,20 @@ def parse_alternatives(raw: str, qmin=3, qmax=8, max_words=12):
         logger.debug("Added question marks where needed")
 
         alts = [a for a in alts if len(a.split()) <= max_words]
-        logger.debug("Filtered by max words (%d): %d alternatives remain",
-                     max_words, len(alts))
+        logger.debug(
+            "Filtered by max words (%d): %d alternatives remain", max_words,
+            len(alts)
+        )
 
         alts = _normalize_list(alts)[:qmax]
-        logger.debug("After normalization and limit: %d alternatives",
-                     len(alts))
+        logger.debug(
+            "After normalization and limit: %d alternatives", len(alts)
+        )
 
         if len(alts) < qmin:
-            logger.warning("Only %d alternatives found, need at least %d",
-                           len(alts), qmin)
+            logger.warning(
+                "Only %d alternatives found, need at least %d", len(alts), qmin
+            )
             raise ValueError("Too few valid alternatives")
 
         logger.info("Successfully parsed %d alternatives", len(alts))
@@ -102,8 +108,9 @@ def html_to_compact_text(answer_html: str, max_chars: int = 15000) -> str:
     for table in soup.find_all("table"):
         rows = []
         for tr in table.find_all("tr"):
-            cells = ([c.get_text(" ", strip=True)
-                     for c in tr.find_all(["th", "td"])])
+            cells = ([
+                c.get_text(" ", strip=True) for c in tr.find_all(["th", "td"])
+            ])
             rows.append(" | ".join(cells))
         table.replace_with("\n".join(rows))
 
@@ -115,52 +122,60 @@ def html_to_compact_text(answer_html: str, max_chars: int = 15000) -> str:
     return text[:max_chars]
 
 
-def generate_questions_for_items(items, lm_client,
-                                 qmin=3, qmax=8, max_words=12,
-                                 limit=None):
+def generate_questions_for_items(
+    items, lm_client, qmin=3, qmax=8, max_words=12, limit=None
+):
     """Generate alternative questions for FAQ items using LLM."""
     total_items = len(items[:limit] if limit else items)
     logger.info("Starting question generation for %d FAQ items", total_items)
-    logger.info("Parameters: qmin=%d, qmax=%d, max_words=%d",
-                qmin, qmax, max_words)
+    logger.info(
+        "Parameters: qmin=%d, qmax=%d, max_words=%d", qmin, qmax, max_words
+    )
 
     results = []
     successful = 0
     failed = 0
 
     for i, item in enumerate(items[:limit] if limit else items):
-        logger.info("Processing item %d/%d: %s", i+1, total_items,
-                    item["slug"])
+        logger.info(
+            "Processing item %d/%d: %s", i + 1, total_items, item["slug"]
+        )
 
         heading = item["heading"]
         logger.debug("Item heading: %s", heading)
 
         try:
             answer_html = extract_answer_html(item["fragment_html"])
-            logger.debug("Extracted answer HTML: %d characters",
-                         len(answer_html))
+            logger.debug(
+                "Extracted answer HTML: %d characters", len(answer_html)
+            )
 
             raw_answer_html = extract_answer_html(item["fragment_html"])
             compact = html_to_compact_text(raw_answer_html, max_chars=18000)
-            messages = build_question_messages(heading, compact, qmin,
-                                               qmax, max_words)
+            messages = build_question_messages(
+                heading, compact, qmin, qmax, max_words
+            )
 
             logger.debug("Built %d messages for LLM", len(messages))
 
-            logger.info("Sending request to LLM for item %d/%d",
-                        i+1, total_items)
+            logger.info(
+                "Sending request to LLM for item %d/%d", i + 1, total_items
+            )
             content = lm_client.chat(messages, max_tokens=256)
 
             logger.debug("Parsing LLM response for alternatives")
             alternatives = parse_alternatives(content, qmin, qmax, max_words)
             successful += 1
 
-            logger.info("Successfully generated %d alternatives for %s",
-                        len(alternatives), item["slug"])
+            logger.info(
+                "Successfully generated %d alternatives for %s",
+                len(alternatives), item["slug"]
+            )
 
         except Exception as e:
-            logger.error("Failed to generate questions for item %s: %s",
-                         item["slug"], e)
+            logger.error(
+                "Failed to generate questions for item %s: %s", item["slug"], e
+            )
             logger.debug("Full error details:", exc_info=True)
             alternatives = []
             failed += 1
@@ -173,9 +188,13 @@ def generate_questions_for_items(items, lm_client,
         }
         results.append(result)
 
-        logger.debug("Item %d completed. Success: %d, Failed: %d",
-                     i+1, successful, failed)
+        logger.debug(
+            "Item %d completed. Success: %d, Failed: %d", i + 1, successful,
+            failed
+        )
 
-    logger.info("Question generation completed. Successful: %d, Failed: %d",
-                successful, failed)
+    logger.info(
+        "Question generation completed. Successful: %d, Failed: %d",
+        successful, failed
+    )
     return results
