@@ -270,19 +270,22 @@ async def compile_document(
             command.extend(["--seq-faq", seq_faq])
 
         logger.info(f"Executing command: {' '.join(command)}")
+        logger.info("=" * 60)
+        logger.info("Starting document compilation process...")
+        logger.info("=" * 60)
 
-        result = subprocess.run(command, capture_output=True, text=True, timeout=600)
+        result = subprocess.run(command, capture_output=False, text=True, timeout=600)
 
+        logger.info("=" * 60)
         if result.returncode != 0:
             logger.error(f"Command failed with return code {result.returncode}")
-            logger.error(f"STDOUT: {result.stdout}")
-            logger.error(f"STDERR: {result.stderr}")
             raise HTTPException(
-                status_code=500, detail=f"Compilation failed: {result.stderr}"
+                status_code=500,
+                detail=f"Compilation failed with return code {result.returncode}",
             )
 
         logger.info("Document compiled successfully")
-        logger.info(f"STDOUT: {result.stdout}")
+        logger.info("=" * 60)
 
         return {
             "status": "success",
@@ -298,7 +301,7 @@ async def compile_document(
                 "fragments_output": str(fragments_path),
                 "questions_output": str(questions_path),
             },
-            "output": result.stdout,
+            "output": "Check API terminal for detailed logs",
         }
 
     except subprocess.TimeoutExpired:
