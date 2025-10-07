@@ -11,7 +11,7 @@ from src.utils.files import ensure_dir, write_text
 
 
 def build_parser():
-    '''Build command-line argument parser.
+    """Build command-line argument parser.
     Example usage:
         python main.py --in EN_doc.docx --out output --mode concat
     Arguments:
@@ -27,14 +27,16 @@ def build_parser():
         --q-max-words: Maximum words per question (default: 12)
         --q-out: Output file for questions (default: output/questions.jsonl)
         --limit: Limit number of sections to process (default: None)
-    '''
+    """
     p = argparse.ArgumentParser("docx → FAQ HTML fragments")
-    p.add_argument("--in", dest="docx", default="EN_doc.docx",
-                   help="Input DOCX")
+    p.add_argument("--in", dest="docx", default="EN_doc.docx", help="Input DOCX")
     p.add_argument("--out", dest="outdir", default="out", help="Output folder")
-    p.add_argument("--mode", choices=["concat", "files"], default="concat",
-                   help="concat=single fragments file,"
-                   " files=one file per section")
+    p.add_argument(
+        "--mode",
+        choices=["concat", "files"],
+        default="concat",
+        help="concat=single fragments file, files=one file per section",
+    )
     p.add_argument("--log", default="INFO")
 
     p.add_argument("--gen-questions", action="store_true")
@@ -52,32 +54,38 @@ def build_parser():
     p.add_argument("--db-pass", default="UNI_REPOS")
     p.add_argument("--country", type=int, default=0)
     p.add_argument("--inst", type=int, default=0)
-    p.add_argument("--lang", type=int, default=1)          # 1 = English now
+    p.add_argument("--lang", type=int, default=1)  # 1 = English now
     p.add_argument("--console", type=int, default=0)
     p.add_argument("--sub-console", type=int, default=0)
     p.add_argument("--bank-map", default="")
     p.add_argument("--fragments", default="output/faq_fragments.html")
     p.add_argument("--questions-jsonl", default="output/questions.jsonl")
-    p.add_argument(
-        "--answers-to",
-        choices=["AR", "OTH"],
-        default="OTH"
-    )  # English→OTH
-    p.add_argument(
-        "--seq-ans", default=""
-    )   # optional: CHATBOT_ANSWERS seq name
-    p.add_argument(
-        "--seq-faq", default=""
-    )   # optional: USER_MANUAL_FAQ seq name
+    p.add_argument("--answers-to", choices=["AR", "OTH"], default="OTH")  # English→OTH
+    p.add_argument("--seq-ans", default="")  # optional: CHATBOT_ANSWERS seq name
+    p.add_argument("--seq-faq", default="")  # optional: USER_MANUAL_FAQ seq name
 
     return p
 
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+
+    # Configure logging to both console and file
+    log_level = getattr(logging, args.log.upper(), logging.INFO)
+    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+    # Create logs directory
+    log_dir = Path("logs")
+    log_dir.mkdir(exist_ok=True)
+
+    # Configure root logger with both file and console handlers
     logging.basicConfig(
-        level=getattr(logging, args.log.upper(), logging.INFO),
-        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        level=log_level,
+        format=log_format,
+        handlers=[
+            logging.FileHandler(log_dir / "faq_processing.log", encoding="utf-8"),
+            logging.StreamHandler(sys.stdout),
+        ],
     )
 
     logger = logging.getLogger(__name__)
@@ -100,8 +108,7 @@ def main(argv=None):
     logger.info("Converting DOCX → HTML: %s", docx_path)
     try:
         html = convert_docx_to_html(docx_path)
-        logger.info("Successfully converted DOCX to HTML (%d characters)",
-                    len(html))
+        logger.info("Successfully converted DOCX to HTML (%d characters)", len(html))
     except Exception as e:
         logger.error("Failed to convert DOCX to HTML: %s", e)
         raise
@@ -111,8 +118,7 @@ def main(argv=None):
         items = split_into_faq_items(html)
         logger.info("Successfully split into %d FAQ items", len(items))
         for i, item in enumerate(items):
-            logger.debug("Item %d: %s (level %d)", i+1, item['slug'],
-                         item['level'])
+            logger.debug("Item %d: %s (level %d)", i + 1, item["slug"], item["level"])
     except Exception as e:
         logger.error("Failed to split into FAQ items: %s", e)
         raise
@@ -134,7 +140,7 @@ def main(argv=None):
             fp = outdir / f"{item['slug']}.html"
             try:
                 write_text(fp, item["fragment_html"])
-                logger.debug("Wrote fragment %d/%d: %s", i+1, len(items), fp)
+                logger.debug("Wrote fragment %d/%d: %s", i + 1, len(items), fp)
             except Exception as e:
                 logger.error("Failed to write fragment file %s: %s", fp, e)
                 raise
@@ -168,8 +174,11 @@ def main(argv=None):
 
         try:
             qrows = generate_questions_for_items(
-                items, client,
-                qmin=args.qmin, qmax=args.qmax, max_words=args.q_max_words,
+                items,
+                client,
+                qmin=args.qmin,
+                qmax=args.qmax,
+                max_words=args.q_max_words,
                 limit=args.limit,
             )
             logger.info("Generated questions for %d sections", len(qrows))
@@ -185,8 +194,7 @@ def main(argv=None):
             write_text(Path(args.q_out), "\n".join(lines))
             logger.info("Wrote questions to %s", args.q_out)
         except Exception as e:
-            logger.error("Failed to write questions file %s: %s",
-                         args.q_out, e)
+            logger.error("Failed to write questions file %s: %s", args.q_out, e)
             raise
 
     logger.info("FAQ processing pipeline completed successfully")
@@ -194,22 +202,45 @@ def main(argv=None):
     if args.db_insert:
         from src.db.oracle_repo import OracleRepo
         from src.faq.persist import load_fragments_map, load_questions_jsonl
+
         try:
             repo = OracleRepo(args.db_dsn, args.db_user, args.db_pass)
             frag = load_fragments_map(args.fragments)
             qrows = load_questions_jsonl(args.questions_jsonl)
 
-            meta = dict(country=args.country, inst=args.inst, lang=args.lang,
-                        console=args.console, sub_console=args.sub_console,
-                        bank_map=args.bank_map)
+            meta = dict(
+                country=args.country,
+                inst=args.inst,
+                lang=args.lang,
+                console=args.console,
+                sub_console=args.sub_console,
+                bank_map=args.bank_map,
+            )
+
+            # Delete existing FAQ for the same console and subconsole
+            logger.info("Checking for existing FAQ data to delete...")
+            deleted_q, deleted_a = repo.delete_existing_faq(
+                args.console, args.sub_console
+            )
+            if deleted_q > 0 or deleted_a > 0:
+                logger.info(
+                    "Deleted %d existing questions and %d existing answers",
+                    deleted_q,
+                    deleted_a,
+                )
+            else:
+                logger.info("No existing FAQ data found for this console/subconsole")
 
             for r in qrows:
                 slug = r["slug"]
                 heading, answer_html = frag[slug]
                 # 1) insert ANSWER, get ID
-                ans_id = repo.insert_answer(meta, html=answer_html,
-                                            answers_to=args.answers_to,
-                                            seq_name=args.seq_ans)
+                ans_id = repo.insert_answer(
+                    meta,
+                    html=answer_html,
+                    answers_to=args.answers_to,
+                    seq_name=args.seq_ans,
+                )
 
                 # 2) insert QUESTIONS: base heading +
                 # variants share the same ANSWER_ID

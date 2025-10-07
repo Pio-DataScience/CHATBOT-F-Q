@@ -272,6 +272,7 @@ async def compile_document(
         logger.info(f"Executing command: {' '.join(command)}")
         logger.info("=" * 60)
         logger.info("Starting document compilation process...")
+        logger.info("CHECK logs/faq_processing.log FOR DETAILED PROGRESS")
         logger.info("=" * 60)
 
         result = subprocess.run(command, capture_output=False, text=True, timeout=600)
@@ -279,12 +280,14 @@ async def compile_document(
         logger.info("=" * 60)
         if result.returncode != 0:
             logger.error(f"Command failed with return code {result.returncode}")
+            logger.error("Check logs/faq_processing.log for details")
             raise HTTPException(
                 status_code=500,
-                detail=f"Compilation failed with return code {result.returncode}",
+                detail=f"Compilation failed with return code {result.returncode}. Check logs/faq_processing.log for details.",
             )
 
         logger.info("Document compiled successfully")
+        logger.info("Check logs/faq_processing.log for full details")
         logger.info("=" * 60)
 
         return {

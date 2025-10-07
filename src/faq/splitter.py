@@ -3,7 +3,7 @@ import logging
 import re
 import hashlib
 
-AR_RE = re.compile(r'[\u0600-\u06FF]')
+AR_RE = re.compile(r"[\u0600-\u06FF]")
 logger = logging.getLogger(__name__)
 HEADING_TAGS = ["h1", "h2", "h3", "h4", "h5", "h6"]
 
@@ -16,7 +16,7 @@ def slugify_heading_text(text: str) -> str:
     - Otherwise, keep Unicode word chars (Arabic included), replace non-word with '-'
     - If still empty, fall back to an 8-char SHA1 hash of the original text
     """
-    arabic_indic_map = str.maketrans('٠١٢٣٤٥٦٧٨٩', '0123456789')
+    arabic_indic_map = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
     normalized_text = text.translate(arabic_indic_map)
 
     # Prefer numeric outline if present (e.g., 3.1.2 → sec-3-1-2)
@@ -48,13 +48,14 @@ def split_into_faq_items(html: str):
     logger.info("Found %d headings in HTML", len(headings))
 
     for i, h in enumerate(headings):
-        logger.debug("Heading %d: <%s> '%s'", i+1, h.name,
-                     h.get_text(strip=True)[:50])
+        logger.debug(
+            "Heading %d: <%s> '%s'", i + 1, h.name, h.get_text(strip=True)[:50]
+        )
 
     items = []
     for i, h in enumerate(headings):
-        logger.debug("Processing heading %d/%d", i+1, len(headings))
-        next_heading = headings[i+1] if i+1 < len(headings) else None
+        logger.debug("Processing heading %d/%d", i + 1, len(headings))
+        next_heading = headings[i + 1] if i + 1 < len(headings) else None
 
         parts = []
         node = h.next_sibling
@@ -73,16 +74,18 @@ def split_into_faq_items(html: str):
 
         heading_text = h.get_text(strip=True)
         slug = slugify_heading_text(heading_text)
-        
+
         # Detect Arabic content for RTL direction
-        is_arabic_content = is_arabic(heading_text) or any(is_arabic(str(part)) for part in parts)
+        is_arabic_content = is_arabic(heading_text) or any(
+            is_arabic(str(part)) for part in parts
+        )
         dir_attr = ' dir="rtl"' if is_arabic_content else ' dir="auto"'
 
         fragment_html = f"""
 <section class="faq-item" data-level="{int(h.name[1])}" id="{slug}">
-  <{h.name} class="faq-q"{dir_attr}>{heading_text}</{h.name}>
+  <{h.name} class="faq-q"{dir_attr} style="font-size: 1.2em; margin-bottom: 0.5em;">{heading_text}</{h.name}>
   <div class="faq-a"{dir_attr}>
-    {''.join(parts)}
+    {"".join(parts)}
   </div>
 </section>
 """.strip()
@@ -91,12 +94,16 @@ def split_into_faq_items(html: str):
             "slug": slug,
             "level": int(h.name[1]),
             "heading": heading_text,
-            "fragment_html": fragment_html
+            "fragment_html": fragment_html,
         }
         items.append(item)
 
-        logger.debug("Created FAQ item: %s (level %d, %d chars)",
-                     slug, item['level'], len(fragment_html))
+        logger.debug(
+            "Created FAQ item: %s (level %d, %d chars)",
+            slug,
+            item["level"],
+            len(fragment_html),
+        )
 
     logger.info("Successfully created %d FAQ items", len(items))
     return items
@@ -104,4 +111,3 @@ def split_into_faq_items(html: str):
 
 def is_arabic(s: str) -> bool:
     return bool(AR_RE.search(s or ""))
-

@@ -1,0 +1,38 @@
+# Share This With Your Team
+
+## FAQ System Access
+
+Your colleagues can access the FAQ Document Compilation System using this URL:
+
+```
+http://172.17.144.1:8501
+```
+
+**Instructions:**
+1. Open any web browser (Chrome, Edge, Firefox)
+2. Copy and paste the URL above
+3. Start uploading and processing FAQ documents!
+
+**Note:** Make sure you're on the same network as the server.
+
+---
+
+## What They Can Do
+
+- Select console and sub-console options
+- Choose document language (English or Arabic)
+- Upload DOCX FAQ documents
+- Process documents automatically
+- Questions are generated using AI
+- Results are saved to the database
+
+---
+
+## Support
+
+If they can't access the system:
+- Verify they're on the same network
+- Check with IT if firewall is blocking
+- Confirm the server is running
+
+Server administrator: Run `.\start_network.ps1` to start the services.
