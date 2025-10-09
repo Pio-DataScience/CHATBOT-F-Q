@@ -1,23 +1,25 @@
 # src/llm/prompts.py
 def build_question_messages(heading: str, answer_html: str, qmin=3,
                             qmax=8, max_words=12):
+    """
+    Build messages for LLM to generate alternative FAQ questions.
+    
+    Optimized for non-reasoning models like Qwen3-14B that output JSON directly.
+    """
     sys = (
-        "You generate alternative FAQ question phrasings. "
-        "Do NOT change the answer. Do NOT summarize or quote it. "
-        "Return ONLY valid JSON: {\"alternatives\": [\"q1\", \"q2\", ...]} "
-        f"Generate between {qmin} and {qmax} concise questions,\n"
-        f"each ≤ {max_words} words."
+        "You are a precise JSON generator. "
+        f"Output ONLY valid JSON: {{\"alternatives\": [\"q1\", \"q2\", ...]}} with {qmin}-{qmax} questions. "
+        f"Each question ≤ {max_words} words. "
+        "NO thinking, NO markdown, NO text before/after JSON. "
+        "ALWAYS close arrays ] and objects } properly."
     )
     user = (
-        f"Heading (question base): \"{heading}\"\n\n"
-        "Answer HTML (read-only context):\n"
-        f"{answer_html}\n\n"
-        "Constraints:\n"
-        "- Keep intent identical to the heading/section.\n"
-        "- No duplication; vary phrasing.\n"
-        "- No punctuation except a trailing question mark if natural.\n"
-        "- Match the language of the heading/content (Arabic, English, etc.).\n"
-        "Output JSON only."
+        f"Base question: \"{heading}\"\n\n"
+        f"Context:\n{answer_html[:500]}...\n\n"
+        "Create alternative phrasings of the base question. "
+        f"Rules: same meaning, different wording, ≤{max_words} words, "
+        "add ? if needed, match language.\n\n"
+        "Output ONLY JSON now:"
     )
     return [{"role": "system", "content": sys},
             {"role": "user", "content": user}]

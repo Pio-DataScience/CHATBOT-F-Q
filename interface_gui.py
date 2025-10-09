@@ -3,9 +3,10 @@ Streamlit GUI for FAQ document processing system.
 Provides user interface for document upload and compilation.
 """
 
-import streamlit as st
-import requests
 import os
+
+import requests
+import streamlit as st
 
 API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8000")
 
@@ -124,23 +125,35 @@ def main():
     Main Streamlit application function.
     """
     st.set_page_config(
-        page_title="FAQ Document Compiler", page_icon="📚", layout="wide"
+        page_title="FAQ Document Compiler", page_icon="�", layout="wide"
     )
 
-    st.title("📚 FAQ Document Compilation System")
+    st.title("FAQ Document Compilation System")
     st.markdown("---")
 
-    health_response = requests.get(f"{API_BASE_URL}/health", timeout=5)
-    if health_response.status_code == 200:
-        st.success("API is connected and healthy")
-    else:
-        st.error("API is not responding properly")
+    try:
+        health_response = requests.get(f"{API_BASE_URL}/health", timeout=30)
+        if health_response.status_code == 200:
+            st.success("API is connected and healthy")
+        else:
+            st.error("API is not responding properly")
+            return
+    except requests.exceptions.Timeout:
+        st.error(f"API health check timed out after 5 seconds. Is the API running at {API_BASE_URL}?")
+        st.info("Please start the API server before using this interface.")
+        return
+    except requests.exceptions.ConnectionError:
+        st.error(f"Cannot connect to API at {API_BASE_URL}. Is the API server running?")
+        st.info("Please start the API server before using this interface.")
+        return
+    except requests.exceptions.RequestException as e:
+        st.error(f"API health check failed: {str(e)}")
         return
 
     col1, col2 = st.columns([1, 1])
 
     with col1:
-        st.subheader("📋 Console Configuration")
+        st.subheader("Console Configuration")
 
         consoles = load_console_options()
         if not consoles:
@@ -168,14 +181,20 @@ def main():
                 for sc in subconsoles
             }
 
-            selected_subconsole_label = st.selectbox(
-                "Select Sub-Console",
-                options=list(subconsole_options.keys()),
-                help="Choose the sub-console for this FAQ document",
-            )
-            sub_console_id = subconsole_options[selected_subconsole_label]
+            if len(subconsoles) == 1:
+                sub_console_id = subconsoles[0]["id"]
+                st.info(
+                    f"Auto-selected sub-console: {subconsoles[0]['id']} - {subconsoles[0].get('desc_eng', 'N/A')}"
+                )
+            else:
+                selected_subconsole_label = st.selectbox(
+                    "Select Sub-Console",
+                    options=list(subconsole_options.keys()),
+                    help="Choose the sub-console for this FAQ document",
+                )
+                sub_console_id = subconsole_options[selected_subconsole_label]
         else:
-            st.warning("No sub-console options available for the selected console")
+            st.info("No sub-consoles available for this console - proceeding without sub-console")
             sub_console_id = 0
 
         st.markdown("---")
@@ -198,24 +217,27 @@ def main():
 
         answers_to = st.selectbox(
             "Document Language",
-            options=["English", "Arabic"],
+            options=["-- Select Language --", "English", "Arabic"],
             index=0,
-            help="Select the language of the FAQ document",
+            help="Select the language of the FAQ document (required)",
         )
 
         if answers_to == "Arabic":
             lang = 1
             answers_to_code = "AR"
-        else:
+        elif answers_to == "English":
             lang = 2
             answers_to_code = "OTH"
+        else:
+            lang = None
+            answers_to_code = None
 
         bank_map = st.text_input(
             "Bank Map Code", value="", help="Optional: Enter the bank mapping code"
         )
 
     with col2:
-        st.subheader("📝 Question Generation Settings")
+        st.subheader("Question Generation Settings")
 
         st.info("Questions will be automatically generated using AI")
 
@@ -247,12 +269,12 @@ def main():
         )
 
         lm_base = "http://localhost:1234/v1"
-        lm_model = ""
-        seq_ans = ""
-        seq_faq = ""
+        lm_model = "qwen/qwen3-14b"
+        seq_ans = "CHATBOT_ANSWERS_SEQ"
+        seq_faq = "USER_MANUAL_FAQ_SEQ"
 
     st.markdown("---")
-    st.subheader("📁 Document Upload")
+    st.subheader("Document Upload")
 
     uploaded_file = st.file_uploader(
         "Choose a DOCX file",
@@ -266,13 +288,13 @@ def main():
 
     st.markdown("---")
 
-    if st.button("🚀 Compile Document", type="primary", use_container_width=True):
+    if st.button("Compile Document", type="primary", use_container_width=True):
         if not uploaded_file:
             st.error("Please upload a DOCX file first")
             return
 
-        if not sub_console_id:
-            st.error("Please select a valid sub-console")
+        if answers_to == "-- Select Language --":
+            st.error("Please select a document language (English or Arabic)")
             return
 
         params = {

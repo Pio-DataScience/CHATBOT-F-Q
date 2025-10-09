@@ -1,12 +1,12 @@
 # main.py
-import logging
-from pathlib import Path
 import argparse
-import sys
 import json
+import logging
+import sys
+from pathlib import Path
 
-from src.io.docx_to_html import convert_docx_to_html
 from src.faq.splitter import split_into_faq_items
+from src.io.docx_to_html import convert_docx_to_html
 from src.utils.files import ensure_dir, write_text
 
 
@@ -78,12 +78,17 @@ def main(argv=None):
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
 
+    # Generate daily log filename
+    from datetime import datetime
+
+    log_filename = f"faq_processing_{datetime.now().strftime('%Y-%m-%d')}.log"
+
     # Configure root logger with both file and console handlers
     logging.basicConfig(
         level=log_level,
         format=log_format,
         handlers=[
-            logging.FileHandler(log_dir / "faq_processing.log", encoding="utf-8"),
+            logging.FileHandler(log_dir / log_filename, encoding="utf-8"),
             logging.StreamHandler(sys.stdout),
         ],
     )
@@ -155,8 +160,8 @@ def main(argv=None):
         if args.limit:
             logger.info("Processing limited to first %d sections", args.limit)
 
-        from src.llm.client import LMClient
         from src.faq.questions import generate_questions_for_items
+        from src.llm.client import LMClient
 
         try:
             ensure_dir(Path(args.q_out))
@@ -231,9 +236,17 @@ def main(argv=None):
             else:
                 logger.info("No existing FAQ data found for this console/subconsole")
 
-            for r in qrows:
+            # Track counts for verification
+            total_answers_inserted = 0
+            total_questions_inserted = 0
+
+            logger.info("Starting database insertion...")
+            logger.info("Processing %d sections from questions file", len(qrows))
+
+            for idx, r in enumerate(qrows, 1):
                 slug = r["slug"]
                 heading, answer_html = frag[slug]
+
                 # 1) insert ANSWER, get ID
                 ans_id = repo.insert_answer(
                     meta,
@@ -241,15 +254,38 @@ def main(argv=None):
                     answers_to=args.answers_to,
                     seq_name=args.seq_ans,
                 )
+                total_answers_inserted += 1
 
-                # 2) insert QUESTIONS: base heading +
-                # variants share the same ANSWER_ID
+                # 2) insert QUESTIONS: base heading + variants share the same ANSWER_ID
                 qs = [heading] + (r.get("alternatives") or [])
                 rows = [{"q": q, "answer_id": ans_id, **meta} for q in qs]
                 repo.insert_questions_bulk(rows, seq_name=args.seq_faq)
+                total_questions_inserted += len(rows)
+
+                logger.debug(
+                    "Section %d/%d: Inserted 1 answer + %d questions for '%s'",
+                    idx,
+                    len(qrows),
+                    len(rows),
+                    slug[:50],
+                )
 
             repo.commit()
-            print("DB insert OK.")
+
+            # Final verification log
+            logger.info("=" * 80)
+            logger.info("DATABASE INSERTION SUMMARY")
+            logger.info("=" * 80)
+            logger.info("Sections processed: %d", len(qrows))
+            logger.info("Answers inserted: %d", total_answers_inserted)
+            logger.info("Questions inserted: %d", total_questions_inserted)
+            logger.info(
+                "Verification: Sections=%d, Answers=%d (Should be identical)",
+                len(qrows),
+                total_answers_inserted,
+            )
+            logger.info("Database transaction committed successfully")
+            logger.info("=" * 80)
         except Exception as e:
             logging.error("Exception during DB insert: %s", e)
             try:

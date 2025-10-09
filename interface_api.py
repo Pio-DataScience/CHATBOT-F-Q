@@ -3,19 +3,31 @@ FastAPI backend for FAQ document processing system.
 Provides endpoints for retrieving console/subconsole options and compiling documents.
 """
 
-import os
-import sys
-import subprocess
-import tempfile
-from pathlib import Path
 import logging
+import os
+import subprocess
+import sys
+import tempfile
+from datetime import datetime
+from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+import oracledb
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-import oracledb
 
-logging.basicConfig(level=logging.INFO)
+# Configure daily log files
+log_dir = Path("logs")
+log_dir.mkdir(exist_ok=True)
+log_filename = f"api_{datetime.now().strftime('%Y-%m-%d')}.log"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler(log_dir / log_filename, encoding="utf-8"),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(title="FAQ Compilation API", version="1.0.0")

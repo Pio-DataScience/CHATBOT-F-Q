@@ -13,23 +13,32 @@ if (Test-Path ".venv\Scripts\Activate.ps1") {
     exit 1
 }
 
-# Get server IP address (excluding virtual adapters like Docker/WSL)
+# Get server IP address (excluding virtual adapters like Docker/WSL/VirtualBox)
 try {
-    # Try to get real LAN IP (192.168.x.x or 10.x.x.x) - exclude 172.17.x.x (Docker/WSL)
+    # Get real physical network adapter (Wi-Fi or Ethernet) - exclude virtual adapters
     $serverIP = (Get-NetIPAddress -AddressFamily IPv4 | 
         Where-Object {
             ($_.IPAddress -like "192.168.*" -or $_.IPAddress -like "10.*") -and 
-            $_.IPAddress -ne "127.0.0.1"
+            $_.IPAddress -ne "127.0.0.1" -and
+            $_.InterfaceAlias -notlike "*Virtual*" -and
+            $_.InterfaceAlias -notlike "*Loopback*" -and
+            $_.InterfaceAlias -notlike "*VMware*" -and
+            $_.InterfaceAlias -notlike "*Hyper-V*" -and
+            ($_.InterfaceAlias -like "*Ethernet*" -or $_.InterfaceAlias -like "*Wi-Fi*")
         } | 
         Select-Object -First 1).IPAddress
     
     if (-not $serverIP) {
-        Write-Host "WARNING: Could not find LAN IP (192.168.x.x or 10.x.x.x)" -ForegroundColor Yellow
-        Write-Host "Please manually find your LAN IP with: ipconfig" -ForegroundColor Yellow
+        Write-Host "WARNING: Could not auto-detect physical network IP" -ForegroundColor Yellow
+        Write-Host "Available IP addresses:" -ForegroundColor Yellow
+        Get-NetIPAddress -AddressFamily IPv4 | Where-Object {$_.IPAddress -notlike "127.*"} | 
+            Select-Object IPAddress, InterfaceAlias | Format-Table -AutoSize
+        Write-Host "Please enter your LAN IP (usually Wi-Fi or Ethernet adapter):" -ForegroundColor Yellow
         $serverIP = Read-Host "Enter your LAN IP address"
     }
     
     Write-Host "`nServer LAN IP Address: $serverIP" -ForegroundColor Green
+    Write-Host "Detected from physical network adapter (Ethernet/Wi-Fi)" -ForegroundColor Cyan
 } catch {
     Write-Host "Could not auto-detect IP. Using localhost..." -ForegroundColor Yellow
     $serverIP = "localhost"
