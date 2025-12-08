@@ -287,7 +287,7 @@ async def compile_document(
         logger.info("CHECK logs/faq_processing.log FOR DETAILED PROGRESS")
         logger.info("=" * 60)
 
-        result = subprocess.run(command, capture_output=False, text=True, timeout=600)
+        result = subprocess.run(command, capture_output=False, text=True, timeout=3600)
 
         logger.info("=" * 60)
         if result.returncode != 0:

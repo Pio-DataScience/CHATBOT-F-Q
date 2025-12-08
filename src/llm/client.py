@@ -26,7 +26,7 @@ class LMClient:
         base_url=None,
         model=None,
         temperature=0.2,
-        timeout=500,
+        timeout=900,
         max_retries=3,
         retry_delay=5,
         backoff_factor=2.0,
@@ -38,7 +38,7 @@ class LMClient:
             base_url: LLM API base URL
             model: Model name to use
             temperature: Sampling temperature (0.0-1.0)
-            timeout: Request timeout in seconds (default: 500)
+            timeout: Request timeout in seconds (default: 900)
             max_retries: Maximum number of retry attempts (default: 3)
             retry_delay: Initial delay between retries in seconds (default: 5)
             backoff_factor: Exponential backoff multiplier (default: 2.0)

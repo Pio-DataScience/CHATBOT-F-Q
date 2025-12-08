@@ -105,13 +105,13 @@ def compile_document(file, params):
         }
 
         response = requests.post(
-            f"{API_BASE_URL}/compile", files=files, data=form_data, timeout=600
+            f"{API_BASE_URL}/compile", files=files, data=form_data, timeout=3600
         )
         response.raise_for_status()
         return response.json()
 
     except requests.exceptions.Timeout:
-        st.error("Request timeout - the compilation took too long")
+        st.error("Request timeout - the compilation took too long (exceeded 1 hour)")
         return None
     except requests.exceptions.RequestException as e:
         st.error(f"Compilation failed: {str(e)}")
@@ -124,9 +124,7 @@ def main():
     """
     Main Streamlit application function.
     """
-    st.set_page_config(
-        page_title="FAQ Document Compiler", page_icon="�", layout="wide"
-    )
+    st.set_page_config(page_title="FAQ Document Compiler", page_icon="�", layout="wide")
 
     st.title("FAQ Document Compilation System")
     st.markdown("---")
@@ -139,7 +137,9 @@ def main():
             st.error("API is not responding properly")
             return
     except requests.exceptions.Timeout:
-        st.error(f"API health check timed out after 5 seconds. Is the API running at {API_BASE_URL}?")
+        st.error(
+            f"API health check timed out after 5 seconds. Is the API running at {API_BASE_URL}?"
+        )
         st.info("Please start the API server before using this interface.")
         return
     except requests.exceptions.ConnectionError:
@@ -194,7 +194,9 @@ def main():
                 )
                 sub_console_id = subconsole_options[selected_subconsole_label]
         else:
-            st.info("No sub-consoles available for this console - proceeding without sub-console")
+            st.info(
+                "No sub-consoles available for this console - proceeding without sub-console"
+            )
             sub_console_id = 0
 
         st.markdown("---")
@@ -269,7 +271,7 @@ def main():
         )
 
         lm_base = "http://localhost:1234/v1"
-        lm_model = "qwen/qwen3-14b"
+        lm_model = "qwen/qwen3-8b"
         seq_ans = "CHATBOT_ANSWERS_SEQ"
         seq_faq = "USER_MANUAL_FAQ_SEQ"
 
