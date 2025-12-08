@@ -222,23 +222,27 @@ def main(argv=None):
                 bank_map=args.bank_map,
             )
 
-            # Delete existing FAQ for the same console and subconsole
+            # Delete existing FAQ for the same console, subconsole, and language
             logger.info("Checking for existing FAQ data to delete...")
             deleted_q, deleted_a = repo.delete_existing_faq(
-                args.console, args.sub_console
+                args.console, args.sub_console, args.lang
             )
             if deleted_q > 0 or deleted_a > 0:
                 logger.info(
-                    "Deleted %d existing questions and %d existing answers",
+                    "Deleted %d existing questions and %d existing answers for language ID %d",
                     deleted_q,
                     deleted_a,
+                    args.lang,
                 )
             else:
-                logger.info("No existing FAQ data found for this console/subconsole")
+                logger.info(
+                    "No existing FAQ data found for this console/subconsole/language combination"
+                )
 
             # Track counts for verification
             total_answers_inserted = 0
             total_questions_inserted = 0
+            skipped_empty = 0
 
             logger.info("Starting database insertion...")
             logger.info("Processing %d sections from questions file", len(qrows))
@@ -246,6 +250,20 @@ def main(argv=None):
             for idx, r in enumerate(qrows, 1):
                 slug = r["slug"]
                 heading, answer_html = frag[slug]
+
+                # Skip empty content: check if HTML has actual text content
+                import re
+
+                text_content = re.sub(r"<[^>]+>", "", answer_html).strip()
+                if not text_content:
+                    logger.debug(
+                        "Section %d/%d: Skipping empty content for '%s'",
+                        idx,
+                        len(qrows),
+                        slug[:50],
+                    )
+                    skipped_empty += 1
+                    continue
 
                 # 1) insert ANSWER, get ID
                 ans_id = repo.insert_answer(
@@ -277,11 +295,13 @@ def main(argv=None):
             logger.info("DATABASE INSERTION SUMMARY")
             logger.info("=" * 80)
             logger.info("Sections processed: %d", len(qrows))
+            logger.info("Sections with content: %d", total_answers_inserted)
+            logger.info("Empty sections skipped: %d", skipped_empty)
             logger.info("Answers inserted: %d", total_answers_inserted)
             logger.info("Questions inserted: %d", total_questions_inserted)
             logger.info(
-                "Verification: Sections=%d, Answers=%d (Should be identical)",
-                len(qrows),
+                "Verification: Non-empty sections=%d, Answers=%d (Should be identical)",
+                len(qrows) - skipped_empty,
                 total_answers_inserted,
             )
             logger.info("Database transaction committed successfully")
