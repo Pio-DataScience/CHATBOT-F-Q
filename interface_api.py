@@ -12,7 +12,11 @@ from datetime import datetime
 from pathlib import Path
 
 import oracledb
+from dotenv import load_dotenv
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+
+# Load environment variables from .env file
+load_dotenv()
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 

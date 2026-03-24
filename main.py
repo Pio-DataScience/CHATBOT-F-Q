@@ -5,6 +5,11 @@ import logging
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
+
 from src.faq.splitter import split_into_faq_items
 from src.io.docx_to_html import convert_docx_to_html
 from src.utils.files import ensure_dir, write_text

@@ -4,3 +4,4 @@ output_ar/
 .docx*
 logs/
 doc/
+.env/
