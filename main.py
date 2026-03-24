@@ -63,6 +63,9 @@ def build_parser():
     p.add_argument("--answers-to", choices=["AR", "OTH"], default="OTH")  # English→OTH
     p.add_argument("--seq-ans", default="")  # optional: CHATBOT_ANSWERS seq name
     p.add_argument("--seq-faq", default="")  # optional: USER_MANUAL_FAQ seq name
+    p.add_argument("--db-schema", default="UNI_REPOS")
+    p.add_argument("--db-table-answers", default="CHATBOT_ANSWERS")
+    p.add_argument("--db-table-questions", default="USER_MANUAL_FAQ")
 
     return p
 
@@ -209,7 +212,14 @@ def main(argv=None):
         from src.faq.persist import load_fragments_map, load_questions_jsonl
 
         try:
-            repo = OracleRepo(args.db_dsn, args.db_user, args.db_pass)
+            repo = OracleRepo(
+                args.db_dsn,
+                args.db_user,
+                args.db_pass,
+                schema=args.db_schema,
+                table_answers=args.db_table_answers,
+                table_questions=args.db_table_questions,
+            )
             frag = load_fragments_map(args.fragments)
             qrows = load_questions_jsonl(args.questions_jsonl)
 

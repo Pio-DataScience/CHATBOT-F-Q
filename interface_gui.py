@@ -102,6 +102,9 @@ def compile_document(file, params):
             "q_max_words": params.get("q_max_words", 12),
             "seq_ans": params.get("seq_ans", ""),
             "seq_faq": params.get("seq_faq", ""),
+            "db_schema": params.get("db_schema", "UNI_REPOS"),
+            "db_table_answers": params.get("db_table_answers", "CHATBOT_ANSWERS"),
+            "db_table_questions": params.get("db_table_questions", "USER_MANUAL_FAQ"),
         }
 
         response = requests.post(
@@ -238,6 +241,27 @@ def main():
             "Bank Map Code", value="", help="Optional: Enter the bank mapping code"
         )
 
+        st.markdown("---")
+        st.subheader("Database Configuration")
+        
+        target_system = st.selectbox(
+            "Target System",
+            options=["Standard (UNI_REPOS)", "BI_DWH"],
+            index=0,
+            help="Select the database schema and table mapping for your team"
+        )
+
+        if target_system == "BI_DWH":
+            db_schema = "BI_DWH"
+            db_table_answers = "PIO_CHATBOT_ANSWERS"
+            db_table_questions = "PIO_CHATBOT_QUESTIONS"
+            st.info("Using BI_DWH mapping: Schema: BI_DWH, Answers: PIO_CHATBOT_ANSWERS, Questions: PIO_CHATBOT_QUESTIONS")
+        else:
+            db_schema = "UNI_REPOS"
+            db_table_answers = "CHATBOT_ANSWERS"
+            db_table_questions = "USER_MANUAL_FAQ"
+            st.info("Using Standard mapping: Schema: UNI_REPOS, Answers: CHATBOT_ANSWERS, Questions: USER_MANUAL_FAQ")
+
     with col2:
         st.subheader("Question Generation Settings")
 
@@ -315,6 +339,9 @@ def main():
             "q_max_words": q_max_words,
             "seq_ans": seq_ans,
             "seq_faq": seq_faq,
+            "db_schema": db_schema,
+            "db_table_answers": db_table_answers,
+            "db_table_questions": db_table_questions,
         }
 
         with st.spinner("Processing document... This may take several minutes."):

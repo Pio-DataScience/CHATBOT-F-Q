@@ -5,9 +5,20 @@ import oracledb
 
 
 class OracleRepo:
-    def __init__(self, dsn, user, password):
+    def __init__(
+        self,
+        dsn,
+        user,
+        password,
+        schema="UNI_REPOS",
+        table_answers="CHATBOT_ANSWERS",
+        table_questions="USER_MANUAL_FAQ",
+    ):
         self.conn = oracledb.connect(user=user, password=password, dsn=dsn)
         self.conn.autocommit = False
+        self.schema = schema
+        self.table_answers = table_answers
+        self.table_questions = table_questions
 
     def close(self):
         self.conn.close()
@@ -44,7 +55,7 @@ class OracleRepo:
                     MIN(ID) as min_id,
                     MAX(ID) as max_id,
                     COUNT(*) as row_count
-                FROM UNI_REPOS.{table_name}
+                FROM {self.schema}.{table_name}
             """)
             result = c.fetchone()
             return {
@@ -60,7 +71,7 @@ class OracleRepo:
             c.execute(
                 f"""
                 SELECT COUNT(*) 
-                FROM UNI_REPOS.{table_name} 
+                FROM {self.schema}.{table_name} 
                 WHERE ID = :id_val
             """,
                 {"id_val": id_value},
@@ -81,7 +92,7 @@ class OracleRepo:
         with self.conn.cursor() as c:
             c.execute(
                 """
-                DELETE FROM UNI_REPOS.USER_MANUAL_FAQ
+                DELETE FROM {self.schema}.{self.table_questions}
                 WHERE CONSOLE_CODE = :console
                 AND SUB_CONSOLE_CODE = :sub_console
                 AND LANG_ID = :lang
@@ -93,7 +104,7 @@ class OracleRepo:
 
             c.execute(
                 """
-                DELETE FROM UNI_REPOS.CHATBOT_ANSWERS
+                DELETE FROM {self.schema}.{self.table_answers}
                 WHERE CONSOLE_CODE = :console
                 AND SUB_CONSOLE_CODE = :sub_console
                 AND LANG_ID = :lang
@@ -127,7 +138,7 @@ class OracleRepo:
 
         # SQL now includes LANG_ID to match USER_MANUAL_FAQ table logic
         sql = """
-        INSERT INTO UNI_REPOS.CHATBOT_ANSWERS
+        INSERT INTO {self.schema}.{self.table_answers}
           (CONSOLE_CODE, SUB_CONSOLE_CODE, COUNTRY_CODE,
            INST_CODE, LANG_ID, BANK_MAP_CODE,
            ANSWER_TEXT_AR, ANSWER_TEXT_OTH, CREATED_AT)
@@ -211,7 +222,7 @@ class OracleRepo:
 
         # SQL now omits ID - database trigger will assign it automatically
         sql = """
-        INSERT INTO UNI_REPOS.USER_MANUAL_FAQ
+        INSERT INTO {self.schema}.{self.table_questions}
           (COUNTRY_CODE, INST_CODE, LANG_ID, CONSOLE_CODE,
            SUB_CONSOLE_CODE,
            BANK_MAP_CODE, QUESTION_TEXT, VECTOR_CSV, HIT_COUNT, ANSWER_ID)

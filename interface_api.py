@@ -182,6 +182,9 @@ async def compile_document(
     q_max_words: int = Form(default=12),
     seq_ans: str = Form(default=""),
     seq_faq: str = Form(default=""),
+    db_schema: str = Form(default="UNI_REPOS"),
+    db_table_answers: str = Form(default="CHATBOT_ANSWERS"),
+    db_table_questions: str = Form(default="USER_MANUAL_FAQ"),
 ):
     """
     Compile a DOCX document into FAQ format and insert into database.
@@ -280,6 +283,12 @@ async def compile_document(
             command.extend(["--seq-ans", seq_ans])
         if seq_faq:
             command.extend(["--seq-faq", seq_faq])
+        if db_schema:
+            command.extend(["--db-schema", db_schema])
+        if db_table_answers:
+            command.extend(["--db-table-answers", db_table_answers])
+        if db_table_questions:
+            command.extend(["--db-table-questions", db_table_questions])
 
         logger.info(f"Executing command: {' '.join(command)}")
         logger.info("=" * 60)
