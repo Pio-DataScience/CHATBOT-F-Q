@@ -1,7 +1,10 @@
-# src/db/oracle_repo.py
 import datetime
+import os
+import logging
 
 import oracledb
+
+logger = logging.getLogger(__name__)
 
 
 class OracleRepo:
@@ -14,11 +17,43 @@ class OracleRepo:
         table_answers="CHATBOT_ANSWERS",
         table_questions="USER_MANUAL_FAQ",
     ):
+        # Enable Thick mode if Instant Client path is provided or found
+        client_path = os.getenv("ORACLE_CLIENT_PATH", r"C:\Program Files\instantclient_23_9")
+        if client_path and os.path.exists(client_path):
+            try:
+                oracledb.init_oracle_client(lib_dir=client_path)
+            except oracledb.ProgrammingError:
+                # Already initialized
+                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Failed to initialize Oracle Client from {client_path}: {e}")
+
         self.conn = oracledb.connect(user=user, password=password, dsn=dsn)
         self.conn.autocommit = False
-        self.schema = schema
-        self.table_answers = table_answers
-        self.table_questions = table_questions
+        self.schema = schema.strip(' "') if schema else ""
+        self.table_answers = table_answers.strip(' "') if table_answers else ""
+        self.table_questions = table_questions.strip(' "') if table_questions else ""
+        
+        # Check if CREATED_AT column exists in the answers table
+        self.has_created_at = self._check_column_exists(self.table_answers, "CREATED_AT")
+        
+        logger.info(f"OracleRepo connected to: [{dsn}] as user: [{user}]")
+        logger.info(f"OracleRepo initialized with schema: [{self.schema}] (len={len(self.schema)})")
+        logger.info(f"Answers table: [{self.table_answers}] (len={len(self.table_answers)}), has_created_at: {self.has_created_at}")
+        logger.info(f"Questions table: [{self.table_questions}] (len={len(self.table_questions)})")
+
+    def _check_column_exists(self, table_name, column_name):
+        """Check if a column exists in a table in the current schema."""
+        try:
+            with self.conn.cursor() as c:
+                # Use a lightweight query to check the schema
+                c.execute(f"SELECT * FROM {self.schema}.{table_name} WHERE 1=0")
+                columns = [col[0].upper() for col in c.description]
+                return column_name.upper() in columns
+        except Exception as e:
+            logger.warning(f"Failed to check column existence for {table_name}.{column_name}: {e}")
+            return False # Safe fallback: assume it doesn't exist
 
     def close(self):
         self.conn.close()
@@ -90,8 +125,9 @@ class OracleRepo:
             lang: Language ID
         """
         with self.conn.cursor() as c:
+            logger.info(f"Targeting questions table for delete: {self.schema}.{self.table_questions}")
             c.execute(
-                """
+                f"""
                 DELETE FROM {self.schema}.{self.table_questions}
                 WHERE CONSOLE_CODE = :console
                 AND SUB_CONSOLE_CODE = :sub_console
@@ -102,8 +138,9 @@ class OracleRepo:
 
             deleted_questions = c.rowcount
 
+            logger.info(f"Targeting answers table for delete: {self.schema}.{self.table_answers}")
             c.execute(
-                """
+                f"""
                 DELETE FROM {self.schema}.{self.table_answers}
                 WHERE CONSOLE_CODE = :console
                 AND SUB_CONSOLE_CODE = :sub_console
@@ -137,13 +174,35 @@ class OracleRepo:
         logger = logging.getLogger(__name__)
 
         # SQL now includes LANG_ID to match USER_MANUAL_FAQ table logic
-        sql = """
+        cols = [
+            "CONSOLE_CODE",
+            "SUB_CONSOLE_CODE",
+            "COUNTRY_CODE",
+            "INST_CODE",
+            "LANG_ID",
+            "BANK_MAP_CODE",
+            "ANSWER_TEXT_AR",
+            "ANSWER_TEXT_OTH",
+        ]
+        placeholders = [
+            ":console",
+            ":sub_console",
+            ":country",
+            ":inst",
+            ":lang",
+            ":bank_map",
+            ":ans_ar",
+            ":ans_oth",
+        ]
+
+        if self.has_created_at:
+            cols.append("CREATED_AT")
+            placeholders.append(":created_at")
+
+        sql = f"""
         INSERT INTO {self.schema}.{self.table_answers}
-          (CONSOLE_CODE, SUB_CONSOLE_CODE, COUNTRY_CODE,
-           INST_CODE, LANG_ID, BANK_MAP_CODE,
-           ANSWER_TEXT_AR, ANSWER_TEXT_OTH, CREATED_AT)
-        VALUES (:console, :sub_console, :country, :inst, :lang, :bank_map,
-                :ans_ar, :ans_oth, :created_at)
+          ({', '.join(cols)})
+        VALUES ({', '.join(placeholders)})
         RETURNING ID INTO :new_id
         """
 
@@ -167,20 +226,20 @@ class OracleRepo:
                 # Create output variable to capture generated ID
                 id_var = c.var(int)
 
-                c.execute(
-                    sql,
-                    dict(
-                        console=meta["console"],
-                        sub_console=meta["sub_console"],
-                        country=meta["country"],
-                        inst=meta["inst"],
-                        lang=meta["lang"],
-                        bank_map=meta["bank_map"],
-                        **ans,
-                        created_at=datetime.datetime.now(),
-                        new_id=id_var,
-                    ),
+                binds = dict(
+                    console=meta["console"],
+                    sub_console=meta["sub_console"],
+                    country=meta["country"],
+                    inst=meta["inst"],
+                    lang=meta["lang"],
+                    bank_map=meta["bank_map"],
+                    **ans,
+                    new_id=id_var,
                 )
+                if self.has_created_at:
+                    binds["created_at"] = datetime.datetime.now()
+
+                c.execute(sql, binds)
 
                 # Get the generated ID from the output variable
                 new_id = id_var.getvalue()[0]
@@ -221,7 +280,7 @@ class OracleRepo:
         logger = logging.getLogger(__name__)
 
         # SQL now omits ID - database trigger will assign it automatically
-        sql = """
+        sql = f"""
         INSERT INTO {self.schema}.{self.table_questions}
           (COUNTRY_CODE, INST_CODE, LANG_ID, CONSOLE_CODE,
            SUB_CONSOLE_CODE,

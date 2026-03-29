@@ -13,10 +13,27 @@ from pathlib import Path
 
 import oracledb
 from dotenv import load_dotenv
+
+# Enable Thick mode if Instant Client path is provided or found
+client_path = os.getenv("ORACLE_CLIENT_PATH", r"C:\Program Files\instantclient_23_9")
+if client_path and os.path.exists(client_path):
+    try:
+        oracledb.init_oracle_client(lib_dir=client_path)
+    except oracledb.ProgrammingError:
+        # Already initialized
+        pass
+    except Exception as e:
+        import logging
+
+        logging.basicConfig(level=logging.INFO)
+        logging.getLogger(__name__).warning(
+            f"Failed to initialize Oracle Client from {client_path}: {e}"
+        )
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 # Load environment variables from .env file
-load_dotenv()
+# (Moved after logger initialization)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -34,6 +51,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Load environment variables from .env file
+success = load_dotenv()
+logger.info(f"Loading .env file: {'Successful' if success else 'Failed'}")
+logger.info(f"DB_DSN from env: {os.getenv('DB_DSN', 'NOT SET')}")
+logger.info(f"DB_USER from env: {os.getenv('DB_USER', 'NOT SET')}")
+logger.info(f"DB_SCHEMA from env: {os.getenv('DB_SCHEMA', 'NOT SET')}")
+
 app = FastAPI(title="FAQ Compilation API", version="1.0.0")
 
 app.add_middleware(
@@ -44,9 +68,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-DB_DSN = os.getenv("DB_DSN", "192.168.30.43:1521/OPENBI2")
-DB_USER = os.getenv("DB_USER", "UNI_REPOS")
-DB_PASS = os.getenv("DB_PASS", "UNI_REPOS")
+DB_DSN = os.getenv("DB_DSN", "192.168.30.18:1521/BANKBIDB")
+DB_USER = os.getenv("DB_USER", "BI_DWH")
+DB_PASS = os.getenv("DB_PASS", "BI_DWH")
+DB_SCHEMA = os.getenv("DB_SCHEMA", "BI_DWH")
 
 
 def get_db_connection():
@@ -97,11 +122,12 @@ async def get_console_options():
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        query = """
+        query = f"""
         SELECT ID, DESC_ENG, DESC_NAT 
-        FROM UNI_REPOS.PIO_CONSOLE 
+        FROM {DB_SCHEMA}.PIO_CONSOLE 
         ORDER BY ID
         """
+        logger.info(f"Executing query: {query}")
         cursor.execute(query)
 
         results = []
@@ -139,12 +165,13 @@ async def get_subconsole_options(console_id: int):
         conn = get_db_connection()
         cursor = conn.cursor()
 
-        query = """
+        query = f"""
         SELECT ID, DESC_ENG, DESC_NAT 
-        FROM UNI_REPOS.PIO_SUB_CONSOLE 
+        FROM {DB_SCHEMA}.PIO_SUB_CONSOLE 
         WHERE CONSOLE_ID = :console_id
         ORDER BY ID
         """
+        logger.info(f"Executing query: {query} with console_id: {console_id}")
         cursor.execute(query, {"console_id": console_id})
 
         results = []
@@ -264,6 +291,14 @@ async def compile_document(
             "--answers-to",
             answers_to,
             "--db-insert",
+            "--db-dsn",
+            DB_DSN,
+            "--db-user",
+            DB_USER,
+            "--db-pass",
+            DB_PASS,
+            "--db-schema",
+            DB_SCHEMA,
         ]
 
         if gen_questions:
@@ -294,6 +329,9 @@ async def compile_document(
         if db_table_questions:
             command.extend(["--db-table-questions", db_table_questions])
 
+        logger.info(
+            f"Subprocess DB parameters: DSN={DB_DSN}, User={DB_USER}, Schema={db_schema}"
+        )
         logger.info(f"Executing command: {' '.join(command)}")
         logger.info("=" * 60)
         logger.info("Starting document compilation process...")
@@ -354,6 +392,93 @@ async def compile_document(
                 Path(temp_dir).rmdir()
             except Exception as e:
                 logger.warning(f"Failed to delete temp directory: {e}")
+
+
+@app.get("/diag/tables")
+async def list_tables():
+    """
+    Diagnostic endpoint to list all tables in the current schema and check for target tables.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+
+        # Check current user and schema
+        cursor.execute(
+            "SELECT USER, (SELECT SYS_CONTEXT('USERENV', 'CURRENT_SCHEMA') FROM DUAL) FROM DUAL"
+        )
+        res = cursor.fetchone()
+        user, current_schema = res if res else ("unknown", "unknown")
+
+        # List tables in the configured schema
+        query = f"""
+        SELECT OWNER, TABLE_NAME 
+        FROM ALL_TABLES 
+        WHERE OWNER = '{DB_SCHEMA}' OR TABLE_NAME LIKE '%CHATBOT%'
+        ORDER BY OWNER, TABLE_NAME
+        """
+        logger.info(f"Executing diagnostic query: {query}")
+        cursor.execute(query)
+        tables = [{"owner": row[0], "table": row[1]} for row in cursor]
+
+        # Check specifically for the target tables (any casing)
+        cursor.execute("""
+            SELECT OWNER, TABLE_NAME 
+            FROM ALL_TABLES 
+            WHERE UPPER(TABLE_NAME) IN ('PIO_CHATBOT_QUESTIONS', 'PIO_CHATBOT_ANSWERS', 'CHATBOT_ANSWERS', 'USER_MANUAL_FAQ')
+        """)
+        exact_matches = [{"owner": row[0], "table": row[1]} for row in cursor]
+
+        cursor.close()
+        return {
+            "user": user,
+            "configured_schema": DB_SCHEMA,
+            "current_schema": current_schema,
+            "all_found_tables": tables,
+            "target_matches": exact_matches,
+        }
+    except Exception as e:
+        logger.error(f"Diagnostic failed: {e}")
+        return {"error": str(e)}
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.get("/diag/columns/{table_name}")
+async def list_columns(table_name: str):
+    """
+    Diagnostic endpoint to list all columns in a table.
+    """
+    conn = None
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # List columns for the specified table in the configured schema
+        query = f"""
+        SELECT COLUMN_NAME, DATA_TYPE, NULLABLE
+        FROM ALL_TAB_COLUMNS 
+        WHERE OWNER = '{DB_SCHEMA}' AND TABLE_NAME = '{table_name.upper()}'
+        ORDER BY COLUMN_ID
+        """
+        logger.info(f"Executing diagnostic query: {query}")
+        cursor.execute(query)
+        columns = [{"name": row[0], "type": row[1], "nullable": row[2]} for row in cursor]
+        
+        cursor.close()
+        return {
+            "table": table_name.upper(),
+            "schema": DB_SCHEMA,
+            "columns": columns
+        }
+    except Exception as e:
+        logger.error(f"Diagnostic failed: {e}")
+        return {"error": str(e)}
+    finally:
+        if conn:
+            conn.close()
 
 
 @app.get("/health")
